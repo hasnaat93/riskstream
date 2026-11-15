@@ -68,7 +68,7 @@ The first version used Kafka Streams window stores: one for a card's recent paym
 
 The in-memory window store is organised by timestamp first: a fetch for one key over a time range walks every timestamp in that range. Each payment was therefore paying for every other payment in the last hour, on every card. Cost grew with total traffic, not with the card's own activity.
 
-Replacing them with one compact record per card made the cost per payment constant, and the same test now pushes about 6,400 payments a second through the whole topology, JSON included, on a laptop. (A RocksDB window store is keyed by key then time and would not have this problem; the per-card record is still simpler and is one changelog topic instead of several.)
+Replacing them with one compact record per card made the cost per payment independent of total traffic. The whole simulation suite, which pushes five runs of about 88,000 payments through the full topology (JSON included), now finishes in about 70 seconds on a laptop. (A RocksDB window store is keyed by key then time and would not have this problem; the per-card record is still simpler and is one changelog topic instead of several.)
 
 ### Keeping it bounded
 
