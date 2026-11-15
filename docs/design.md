@@ -107,7 +107,9 @@ All thresholds are configuration (`riskstream.rules.*`).
 
 The simulator labels every payment it generates with the scenario it belongs to. The labels never travel on the stream. Tests use them to score a run: of the incidents injected, how many did the intended rule catch; and how many alerts fell on honest payments.
 
-Honest traffic is not all small payments: about one in a hundred is a genuine large purchase, five to twelve times the card's usual. Those are there precisely so that the false-alert figure means something. Most alerts on honest payments are `AMOUNT_SPIKE` firing on such purchases, which is the expected price of that rule at this threshold.
+Honest traffic is not all small payments: about one in a hundred is a genuine large purchase, five to twelve times the card's usual. Those are there precisely so that the false-alert figure means something.
+
+In the measured run, 378 of the 588 alerts (64%) fell on honest payments: `AMOUNT_SPIKE` 287, `GEO_JUMP` 74, `SPEND_LIMIT` 16, `VELOCITY` 1. The spike alerts are the rule doing what it was built to do on purchases the simulator deliberately made large. The `GEO_JUMP` ones were not investigated. As configured, these rules would produce far more false alerts than true ones, and threshold tuning (per-merchant, per-segment) would be the first job of a real deployment.
 
 The figures are properties of this simulator, not predictions about real fraud. Real fraud is rarer, more varied and adversarial.
 

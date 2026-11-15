@@ -1,7 +1,6 @@
 package com.riskstream.common;
 
 import jakarta.servlet.http.HttpServletRequest;
-import java.io.IOException;
 import jakarta.validation.ConstraintViolationException;
 import java.time.Instant;
 import java.util.List;
@@ -85,7 +84,7 @@ public class GlobalExceptionHandler {
      * A browser closing its live alert stream surfaces here as a failed write. There is nobody
      * left to answer and nothing went wrong, so it is not logged as an error.
      */
-    @ExceptionHandler({AsyncRequestNotUsableException.class, IOException.class})
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
     void handleClientGone(Exception ex, HttpServletRequest request) {
         log.debug("Client went away on {}: {}", request.getRequestURI(), ex.toString());
     }

@@ -82,7 +82,8 @@ class SimulationTest {
     }
 
     /** scenario -> {incidents caught, incidents injected}; plus the alerts raised on honest payments. */
-    private record Score(Map<Scenario, int[]> caught, long alertsOnHonestPayments, long honestPayments) {
+    private record Score(Map<Scenario, int[]> caught, long alertsOnHonestPayments, long honestPayments,
+                         Map<Alert.Rule, Long> honestAlertsByRule, long totalAlerts) {
     }
 
     private static Score score(Outcome outcome) {
@@ -96,10 +97,12 @@ class SimulationTest {
         }
         Map<Scenario, Set<String>> caught = new EnumMap<>(Scenario.class);
         long onHonest = 0;
+        Map<Alert.Rule, Long> honestByRule = new EnumMap<>(Alert.Rule.class);
         for (Alert alert : outcome.alerts()) {
             Labelled source = byPaymentId.get(alert.paymentId());
             if (source.scenario() == Scenario.NORMAL) {
                 onHonest++;
+                honestByRule.merge(alert.rule(), 1L, Long::sum);
             } else if (alert.rule().name().equals(source.scenario().expectedRule())) {
                 caught.computeIfAbsent(source.scenario(), s -> new HashSet<>()).add(source.incidentId());
             }
@@ -108,7 +111,7 @@ class SimulationTest {
         incidents.forEach((scenario, ids) -> result.put(scenario,
                 new int[] {caught.getOrDefault(scenario, Set.of()).size(), ids.size()}));
         long honest = outcome.payments().stream().filter(l -> l.scenario() == Scenario.NORMAL).count();
-        return new Score(result, onHonest, honest);
+        return new Score(result, onHonest, honest, honestByRule, outcome.alerts().size());
     }
 
     private static void print(String title, Outcome outcome, Score score) {
@@ -120,6 +123,8 @@ class SimulationTest {
                 scenario, counts[0], counts[1], scenario.expectedRule()));
         System.out.printf("  alerts on honest payments: %d of %,d (%.4f%%)%n", score.alertsOnHonestPayments(),
                 score.honestPayments(), 100.0 * score.alertsOnHonestPayments() / score.honestPayments());
+        System.out.printf("  share of all %d alerts that fell on honest payments: %.1f%%   by rule: %s%n",
+                score.totalAlerts(), 100.0 * score.alertsOnHonestPayments() / score.totalAlerts(), score.honestAlertsByRule());
     }
 
     @Test

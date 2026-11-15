@@ -12,7 +12,7 @@ Java 21 · Spring Boot 4 · Kafka Streams · event-time processing · exactly-on
 
 ## What it does
 
-Payments arrive on a Kafka topic. Four rules judge each one against what is known about its card and raise alerts within about a second:
+Payments arrive on a Kafka topic. Four rules judge each one against what is known about its card and raise alerts as they arrive:
 
 | Rule | Fires when |
 |---|---|
@@ -49,7 +49,9 @@ From `SimulationTest`: two simulated hours, 88,406 payments from 4,000 cards (12
 | Bust-out | `SPEND_LIMIT` | 40 of 40 |
 | One large payment | `AMOUNT_SPIKE` | 39 of 40 |
 
-Alerts on honest payments: 378 of 87,648 (0.43%), almost all `AMOUNT_SPIKE` on genuine large purchases, which is the price of that rule at this threshold.
+Alerts on honest payments: 378 of 87,648 (0.43%). Read that next to the other figure, because it is the less flattering one: **378 of the 588 alerts (64%) fell on honest payments**. They break down as `AMOUNT_SPIKE` 287, `GEO_JUMP` 74, `SPEND_LIMIT` 16, `VELOCITY` 1.
+
+That is partly built in. The simulator makes 1 honest payment in 100 a genuine large purchase (5 to 12 times the card's usual), which is what `AMOUNT_SPIKE` is designed to flag, so a high spike count is the rule behaving as specified, not a surprise. The 74 `GEO_JUMP` alerts on honest payments were not investigated; a likely cause is an honest payment on a card shortly after an injected incident on it, which would arguably be a correct alert, but that is a guess. As configured, these rules would bury an analyst in false alerts, and tuning them is exactly what a real system would have to do.
 
 The same run with every payment delivered up to 20 seconds early or late catches the same incidents. These figures describe this simulator. Real fraud is rarer, more varied and adversarial, so they say nothing about real-world accuracy.
 

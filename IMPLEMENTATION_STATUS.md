@@ -7,9 +7,9 @@ An honest record of what was built, what was run, and what was not. Last updated
 | Check | Result |
 |---|---|
 | `./mvnw verify` | 28 tests pass: 20 topology, 3 simulation, 5 application |
-| Simulation scoring | 88,406 payments, 160 injected incidents: 159 caught by the intended rule. 378 of 87,648 honest payments (0.43%) raised an alert |
+| Simulation scoring | 88,406 payments, 160 injected incidents: 159 caught by the intended rule. 378 of 87,648 honest payments (0.43%) raised an alert, which is 378 of the 588 alerts (64%): `AMOUNT_SPIKE` 287, `GEO_JUMP` 74, `SPEND_LIMIT` 16, `VELOCITY` 1 |
 | Out-of-order delivery | Same incidents caught with every payment delivered up to 20 s early or late |
-| Local run, embedded mode | Started, ran for about 2.5 minutes at 12 payments a second, every injected incident caught (11 of 11), no errors apart from one noisy log line, now fixed |
+| Local run, embedded mode | Started, ran for about 2.5 minutes at 12 payments a second, every injected incident caught (11 of 11), no console errors. The server logged an error each time a browser closed its live alert stream; a handler for that was added afterwards and was not re-checked in a live run (the tests pass) |
 | Browser walkthrough (Microsoft Edge, scripted) | 13 of 13 checks pass: live traffic, each of the four scenarios injected from the console produces its alert in the feed, scoreboard, alert evidence, OpenAPI, no horizontal overflow on a phone, no console errors. The README screenshot is from this run |
 
 ## Verified in GitHub Actions (Ubuntu, Java 21)
@@ -30,8 +30,10 @@ An honest record of what was built, what was run, and what was not. Last updated
 ## Not verified
 
 - **A public deployment.** The image and `render.yaml` are ready and the image is tested in CI, but nothing is hosted.
+- **`docker compose up`.** The Compose file (Kafka and Riskstream together, with hand-written listener settings) has never been run. The CI Kafka job runs the jar against a broker started as a service container, which exercises the application but not this file.
+- **End-to-end latency.** How long an alert takes from the payment being published to appearing was not measured, through Kafka or otherwise.
 - **Multi-broker Kafka**, partition rebalancing between several running instances, and consumer lag under load. CI uses one broker and one instance at a time.
-- **Throughput limits.** The simulation shows the topology keeps up with 88,000 payments on a laptop, and nothing more precise was measured.
+- **Throughput limits.** The simulation processes 88,000 payments in the test driver on a laptop, and nothing more precise was measured. It says nothing about a Kafka deployment's capacity.
 - **Long-running behaviour.** The longest continuous run was a few minutes.
 - **Recovery with large state.** State here is a few thousand cards. Restore time from the changelog at realistic volumes was not measured.
 - **Keyboard-only and screen-reader use of the console.**
