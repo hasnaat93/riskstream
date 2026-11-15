@@ -1,0 +1,12 @@
+# Render Blueprint: one free web service running Riskstream in embedded mode (no broker).
+# Deploy: https://render.com/deploy?repo=https://github.com/hasnaat93/riskstream
+#
+# The free plan sleeps after 15 minutes without traffic and wakes on the next request.
+services:
+  - type: web
+    name: riskstream
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /actuator/health
+    autoDeploy: true

@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests (topology on Kafka's test driver, simulation scoring, API)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - run: chmod +x mvnw && ./mvnw -B verify
+
+  kafka:
+    name: Against a real Kafka broker, with a crash in the middle
+    runs-on: ubuntu-latest
+    services:
+      kafka:
+        image: apache/kafka:latest
+        ports:
+          - 9092:9092
+    env:
+      RISKSTREAM_MODE: kafka
+      KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+      SIMULATOR_RATE: "40"
+      SIMULATOR_INCIDENT_SECONDS: "3"
+      PORT: "8080"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - run: chmod +x mvnw && ./mvnw -B -q package -DskipTests
+      - name: Start Riskstream as a Kafka Streams application
+        run: |
+          nohup java -jar target/riskstream-1.0.0.jar > app-1.log 2>&1 &
+          echo $! > app.pid
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:8080/actuator/health 2>/dev/null | grep -q '"status":"UP"' && exit 0
+            sleep 2
+          done
+          tail -60 app-1.log; exit 1
+      - name: Every injected fraud pattern is detected through Kafka
+        run: |
+          python3 - <<'EOF'
+          import json, time, urllib.request
+          def stats():
+              return json.load(urllib.request.urlopen("http://localhost:8080/api/v1/stats"))
+          deadline = time.time() + 120
+          while True:
+              s = stats()
+              scores = {x["scenario"]: (x["injected"], x["detected"]) for x in s["scenarios"]}
+              if s["runtime"].startswith("Kafka Streams") and all(d >= 2 for _, d in scores.values()):
+                  break
+              assert time.time() < deadline, f"not every scenario was detected twice in time: {s}"
+              time.sleep(2)
+          print(s["runtime"])
+          print("processed", s["processed"], "alerts", s["alerts"], "late", s["late"], scores)
+          assert "RUNNING" in s["runtime"]
+          injected = sum(i for i, _ in scores.values()); detected = sum(d for _, d in scores.values())
+          assert detected >= injected - 4, "incidents injected in the last seconds may still be in flight"
+          EOF
+      - name: Kill it without warning, then start it again
+        run: |
+          kill -9 "$(cat app.pid)"
+          sleep 3
+          nohup java -jar target/riskstream-1.0.0.jar > app-2.log 2>&1 &
+          echo $! > app.pid
+          for i in $(seq 1 90); do
+            curl -fsS http://localhost:8080/actuator/health 2>/dev/null | grep -q '"status":"UP"' && break
+            sleep 2
+          done
+          python3 - <<'EOF'
+          import json, time, urllib.request
+          deadline = time.time() + 180
+          while True:
+              s = json.load(urllib.request.urlopen("http://localhost:8080/api/v1/stats"))
+              if "RUNNING" in s["runtime"] and s["alerts"] >= 6:
+                  break
+              assert time.time() < deadline, f"the restarted instance did not resume: {s}"
+              time.sleep(3)
+          print("after restart:", s["runtime"], "processed", s["processed"], "alerts", s["alerts"])
+          EOF
+      - name: Exactly-once holds across the crash - no alert was written twice
+        run: |
+          docker exec ${{ job.services.kafka.id }} /opt/kafka/bin/kafka-console-consumer.sh \
+            --bootstrap-server localhost:9092 --topic risk-alerts --from-beginning \
+            --isolation-level read_committed --timeout-ms 15000 > alerts.jsonl 2>/dev/null || true
+          python3 - <<'EOF'
+          import json
+          from collections import Counter
+          alerts = [json.loads(line) for line in open("alerts.jsonl") if line.strip().startswith("{")]
+          ids = Counter(a["alertId"] for a in alerts)
+          repeated = {k: v for k, v in ids.items() if v > 1}
+          print(f"{len(alerts)} committed alerts on the topic, {len(ids)} distinct ids, rules: {dict(Counter(a['rule'] for a in alerts))}")
+          assert len(alerts) >= 12, "expected alerts from before and after the crash"
+          assert not repeated, f"alerts written more than once: {repeated}"
+          EOF
+      - name: Topics the application created
+        run: docker exec ${{ job.services.kafka.id }} /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
+      - name: Application logs
+        if: always()
+        run: |
+          echo "--- first instance"; grep -E "ERROR|WARN|started|Created topic|State transition" app-1.log | tail -25 || true
+          echo "--- second instance"; grep -E "ERROR|WARN|started|State transition" app-2.log | tail -25 || true
+
+  docker:
+    name: Docker image boots in embedded mode within 512 MB
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t riskstream .
+      - run: docker run -d --name demo --memory=512m --memory-swap=512m --cpus=1 -e PORT=10000 -p 10000:10000 riskstream
+      - name: Wait for it, then use it
+        run: |
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:10000/actuator/health 2>/dev/null | grep -q '"status":"UP"' && break
+            sleep 2
+          done
+          set -e
+          curl -fsS http://localhost:10000/ | grep -q "Riskstream"
+          curl -fsS -X POST http://localhost:10000/api/v1/simulate/CARD_TESTING | grep -q VELOCITY
+          sleep 20
+          curl -fsS http://localhost:10000/api/v1/stats | python3 -c '
+          import sys, json
+          s = json.load(sys.stdin)
+          print(s["runtime"], "| processed", s["processed"], "alerts", s["alerts"])
+          assert s["processed"] > 100 and s["alerts"] >= 1 and s["late"] == 0'
+          docker stats --no-stream --format "memory {{.MemUsage}} ({{.MemPerc}})" demo
+          test "$(docker inspect -f '{{.State.OOMKilled}}' demo)" = "false"
+      - if: always()
+        run: docker logs demo 2>&1 | tail -30

@@ -1,0 +1,56 @@
+spring:
+  application:
+    name: riskstream
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+
+server:
+  port: ${PORT:8080}
+  error:
+    include-stacktrace: never
+    include-message: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+    tags-sorter: alpha
+
+riskstream:
+  # embedded: no broker needed, the topology runs in-process (demo and local use).
+  # kafka:    a real Kafka Streams application against the cluster at KAFKA_BOOTSTRAP_SERVERS.
+  mode: ${RISKSTREAM_MODE:embedded}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    application-id: ${KAFKA_APPLICATION_ID:riskstream}
+    partitions: ${KAFKA_PARTITIONS:3}
+    stream-threads: ${KAFKA_STREAM_THREADS:2}
+  simulator:
+    payments-per-second: ${SIMULATOR_RATE:12}
+    cards: 4000
+    seed: 20260302
+    incident-every-seconds: ${SIMULATOR_INCIDENT_SECONDS:20}
+  rules:
+    velocity-max-payments: 5          # more than this many payments on a card ...
+    velocity-window: 60s              # ... within this long
+    spend-limit-minor: 250000         # more than 2,500.00 on a card ...
+    spend-window: 10m                 # ... within this long
+    geo-window: 30m                   # two countries on one card within this long
+    spike-multiplier: 8               # a payment this many times the card's average ...
+    spike-min-history: 5              # ... once the card has this many earlier payments ...
+    spike-min-amount-minor: 10000     # ... and the payment is at least 100.00
+    cooldown: 5m                      # a rule that fired for a card stays quiet this long
+    dedupe-retention: 1h              # how long a payment id is remembered
+    allowed-lateness: 30m             # older than this, relative to the newest event, is dropped

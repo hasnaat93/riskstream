@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Riskstream · Live payment risk monitor</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23111831'/%3E%3Cpath d='M5 18h6l3-9 5 15 3-8h5' fill='none' stroke='%23e5604d' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b1024; --surface: #111831; --raised: #172040; --line: #232c4d;
+    --text: #e8ecf8; --muted: #9aa5c4; --faint: #6b7697;
+    --accent: #3987e5; --good: #3fb37f; --warn: #e0a83a; --bad: #e5604d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1240px; margin: 0 auto; padding: 24px 16px 56px; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+  h2 { font-size: 15px; margin: 0 0 2px; }
+  p { margin: 0; }
+  a { color: var(--accent); }
+  .muted { color: var(--muted); } .small { font-size: 12px; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; justify-content: space-between; }
+  .notice { margin-top: 14px; padding: 9px 14px; border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 6px; background: var(--surface); color: var(--muted); font-size: 13px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+  .tile .label { color: var(--muted); font-size: 12px; }
+  .tile .value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tile .hint { color: var(--faint); font-size: 12px; }
+  .cols { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; align-items: start; }
+  @media (max-width: 900px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+  .stack { display: grid; gap: 14px; }
+  button { font: inherit; color: var(--text); background: var(--raised); border: 1px solid var(--line); border-radius: 7px; padding: 6px 11px; cursor: pointer; text-align: left; }
+  button:hover { border-color: var(--faint); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .scenario { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .scenario:last-child { border-bottom: 0; padding-bottom: 0; }
+  .scenario b { display: block; }
+  .score { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .feed { display: grid; gap: 8px; margin-top: 10px; max-height: 640px; overflow-y: auto; padding-right: 4px; }
+  .alert { border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 8px; padding: 9px 12px; background: var(--raised); animation: arrive 0.5s ease-out; }
+  .alert.HIGH { border-left-color: var(--bad); }
+  @keyframes arrive { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .alert { animation: none; } }
+  .alert .top { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; justify-content: space-between; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; border: 1px solid currentColor; white-space: nowrap; }
+  .HIGHp { color: var(--bad); } .MEDIUMp { color: var(--warn); }
+  code, .mono { font: 12px ui-monospace, Consolas, monospace; color: var(--muted); }
+  .rows { display: grid; gap: 9px; margin-top: 10px; }
+  .row { display: grid; grid-template-columns: minmax(96px, 36%) 1fr auto; gap: 10px; align-items: center; font-size: 13px; }
+  .track { height: 10px; background: var(--raised); border-radius: 0 4px 4px 0; }
+  .fill { height: 10px; background: var(--accent); border-radius: 0 4px 4px 0; min-width: 2px; }
+  .row .num { font-variant-numeric: tabular-nums; text-align: right; min-width: 44px; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 5px 14px; margin: 10px 0 0; font-size: 13px; }
+  dt { color: var(--muted); } dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .rule { padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .rule:last-child { border-bottom: 0; padding-bottom: 0; }
+  #live { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--good); margin-right: 6px; }
+  #live.off { background: var(--bad); }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #050816; border: 1px solid var(--line); padding: 8px 14px; border-radius: 8px; font-size: 13px; display: none; z-index: 10; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Riskstream</h1>
+      <p class="muted">Real-time payment risk monitoring on Kafka Streams · live console</p>
+    </div>
+    <div class="small muted"><span id="live"></span><span id="status">connecting…</span> · <a href="/swagger-ui.html">API docs</a></div>
+  </header>
+  <p class="notice"><b>Simulated traffic.</b> Every card, merchant and payment here is generated. Ordinary payments flow continuously and a fraud pattern is injected every few seconds; you can inject one yourself below and watch the rule catch it. <span id="runtime"></span></p>
+
+  <div class="tiles" id="tiles" aria-live="off"></div>
+
+  <div class="cols">
+    <section class="card">
+      <h2>Live alerts</h2>
+      <p class="small muted" id="feednote">Most recently raised first. Each alert names the rule, the card and the evidence the rule used.</p>
+      <div class="feed" id="feed" aria-live="polite"></div>
+    </section>
+
+    <div class="stack">
+      <section class="card">
+        <h2>Inject a fraud pattern</h2>
+        <p class="small muted">Plays the pattern into the stream. The score shows incidents caught out of incidents injected since start.</p>
+        <div id="scenarios"></div>
+      </section>
+      <section class="card">
+        <h2>Alerts by rule</h2>
+        <div class="rows" id="byrule"></div>
+      </section>
+      <section class="card">
+        <h2>Stream health</h2>
+        <dl id="health"></dl>
+      </section>
+      <section class="card">
+        <h2>Rules in force</h2>
+        <div id="rules"></div>
+      </section>
+    </div>
+  </div>
+</main>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const int = (n) => Number(n).toLocaleString("en-US");
+const label = (s) => String(s).toLowerCase().replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+const clock = (iso) => new Date(iso).toISOString().slice(11, 19);
+const seen = new Set();
+
+async function api(path, options) {
+  const res = await fetch("/api/v1" + path, options);
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(body?.message || res.statusText);
+  return body;
+}
+function toast(message, bad) {
+  const t = $("toast"); t.textContent = message; t.style.display = "block"; t.style.borderColor = bad ? "var(--bad)" : "var(--line)";
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => (t.style.display = "none"), 3500);
+}
+
+function alertCard(a) {
+  const evidence = Object.entries(a.evidence || {}).map(([k, v]) => `${esc(k)} <b>${esc(v)}</b>`).join(" · ");
+  return `<div class="alert ${a.severity}" data-id="${esc(a.alertId)}">
+    <div class="top"><span><span class="pill ${a.severity}p">${esc(label(a.rule))}</span> <b>${esc(a.summary)}</b></span><span class="small muted">event time ${clock(a.eventTime)} UTC</span></div>
+    <div class="small muted" style="margin-top:4px"><span class="mono">${esc(a.cardId)}</span> · payment <span class="mono">${esc(a.paymentId)}</span></div>
+    <div class="small muted" style="margin-top:2px">${evidence}</div></div>`;
+}
+function addAlert(a, prepend) {
+  if (seen.has(a.alertId)) return;        // the same alert can arrive by the stream and by a refresh
+  seen.add(a.alertId);
+  $("feed").insertAdjacentHTML(prepend ? "afterbegin" : "beforeend", alertCard(a));
+  while ($("feed").children.length > 120) { const last = $("feed").lastElementChild; seen.delete(last.dataset.id); last.remove(); }
+}
+
+const tile = (name, value, hint) => `<div class="card tile"><div class="label">${esc(name)}</div><div class="value">${esc(value)}</div><div class="hint">${esc(hint || " ")}</div></div>`;
+function renderStats(s) {
+  $("status").textContent = "Live · " + clock(s.asOf) + " UTC";
+  $("runtime").textContent = s.runtime + ".";
+  const injected = s.scenarios.reduce((t, x) => t + x.injected, 0), detected = s.scenarios.reduce((t, x) => t + x.detected, 0);
+  $("tiles").innerHTML =
+    tile("Payments processed", int(s.processed), s.processedPerSecond.toFixed(1) + " per second") +
+    tile("Alerts raised", int(s.alerts), int(s.suppressed) + " more held back by cooldown") +
+    tile("Incidents caught", `${int(detected)} of ${int(injected)}`, injected ? ((100 * detected) / injected).toFixed(1) + "% of those injected" : "none injected yet") +
+    tile("Alert rate", s.processed ? ((100 * s.alerts) / s.processed).toFixed(2) + "%" : "–", "alerts per payment") +
+    tile("Uptime", s.uptimeSeconds < 120 ? s.uptimeSeconds + " s" : Math.floor(s.uptimeSeconds / 60) + " min", int(s.liveListeners) + " browser(s) watching");
+  $("scenarios").innerHTML = s.scenarios.map((x) => `<div class="scenario"><div><b>${esc(label(x.scenario))}</b><span class="small muted">${esc(x.description)}. Caught by ${esc(label(x.expectedRule))}.</span></div>
+    <div style="text-align:right"><button type="button" data-inject="${x.scenario}">Inject</button><div class="small muted score" style="margin-top:4px">${int(x.detected)} of ${int(x.injected)} caught</div></div></div>`).join("");
+  const top = Math.max(...Object.values(s.alertsByRule), 1);
+  $("byrule").innerHTML = Object.entries(s.alertsByRule).map(([rule, n]) => `<div class="row" title="${esc(label(rule))}: ${int(n)} alerts"><div>${esc(label(rule))}</div><div class="track"><div class="fill" style="width:${((100 * n) / top).toFixed(1)}%"></div></div><div class="num">${int(n)}</div></div>`).join("");
+  $("health").innerHTML = `<dt>Published by the simulator</dt><dd>${int(s.published)}</dd><dt>Duplicates discarded</dt><dd>${int(s.duplicates)}</dd>
+    <dt>Dropped as too late</dt><dd>${int(s.late)}</dd><dt>Malformed records skipped</dt><dd>${int(s.malformed)}</dd>`;
+}
+
+async function refresh() {
+  try { renderStats(await api("/stats")); $("live").className = ""; }
+  catch (e) { $("live").className = "off"; $("status").textContent = "Cannot reach the API"; }
+}
+
+document.addEventListener("click", async (ev) => {
+  const button = ev.target.closest("[data-inject]");
+  if (!button) return;
+  button.disabled = true;
+  try {
+    const r = await api("/simulate/" + button.dataset.inject, { method: "POST" });
+    toast(`Injected ${label(r.scenario)}: ${r.payments} payments. Expect a ${label(r.expectedRule)} alert.`);
+    setTimeout(refresh, 400);
+  } catch (e) { toast(e.message, true); }
+  finally { setTimeout(() => (button.disabled = false), 600); }
+});
+
+async function start() {
+  try {
+    const rules = await api("/rules");
+    $("rules").innerHTML = rules.map((r) => `<div class="rule"><b>${esc(label(r.rule))}</b><div class="muted">${esc(r.description)}</div><div class="small muted">Fires on: ${esc(r.threshold)}</div></div>`).join("");
+    (await api("/alerts?limit=40")).forEach((a) => addAlert(a, false));
+  } catch (e) { /* the status line already says the API is unreachable */ }
+  refresh();
+  setInterval(() => { if (!document.hidden) refresh(); }, 1500);
+  // Alerts are pushed as server-sent events. If the connection drops the browser reconnects by itself.
+  const stream = new EventSource("/api/v1/alerts/stream");
+  stream.addEventListener("alert", (ev) => addAlert(JSON.parse(ev.data), true));
+  stream.onerror = () => { $("feednote").textContent = "Live connection interrupted; reconnecting. Alerts already shown stay."; };
+  stream.onopen = () => { $("feednote").textContent = "Most recently raised first. Each alert names the rule, the card and the evidence the rule used."; };
+}
+start();
+</script>
+</body>
+</html>
