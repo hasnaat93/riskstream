@@ -95,6 +95,8 @@ jobs:
           EOF
       - name: Exactly-once holds across the crash - no alert was written twice
         run: |
+          # stop the application first, so the topic goes quiet and the reader can reach its end
+          kill "$(cat app.pid)" && sleep 8
           docker exec ${{ job.services.kafka.id }} /opt/kafka/bin/kafka-console-consumer.sh \
             --bootstrap-server localhost:9092 --topic risk-alerts --from-beginning \
             --isolation-level read_committed --timeout-ms 15000 > alerts.jsonl 2>/dev/null || true
